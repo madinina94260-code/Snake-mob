@@ -25,6 +25,9 @@ function playSoundEffect(type) {
     } else if (type === 'coin') {
         osc.type = 'sine'; osc.frequency.setValueAtTime(900, audioCtx.currentTime);
         osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
+    } else if (type === 'lvlup') {
+        osc.type = 'sine'; osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.2);
     }
     g.gain.setValueAtTime(sfxVolume * 0.2, audioCtx.currentTime);
     osc.connect(g); g.connect(audioCtx.destination);
@@ -66,9 +69,11 @@ function showCharMenu() {
 }
 
 function selectChar(type) {
-    player = { ...player, ...characters[type], type: type, coins: 0 };
+    // Réinitialisation complète propre
+    player = { ...player, ...characters[type], type: type, coins: 0, lvl: 1, xp: 0, hasDash: false };
     document.getElementById("char-menu").classList.add("hidden");
     document.getElementById("rpg-bar").classList.remove("hidden");
+    gameMusic.currentTime = 0;
     gameMusic.play();
     startRound();
 }
@@ -76,12 +81,19 @@ function selectChar(type) {
 // --- LOGIQUE DE ROUND ---
 function startRound() {
     isPaused = false; score = 0; bossActive = false; bullets = []; goldCoin = null;
-    snake = [{ x: 10 * box, y: 10 * box }];
+    
+    // Le serpent commence avec une taille proportionnelle au niveau
+    snake = [];
+    for(let i = 0; i < player.lvl; i++) {
+        snake.push({ x: (10 - i) * box, y: 10 * box });
+    }
+    
     d = "RIGHT"; nextD = "RIGHT";
     initEnemies();
     spawnRocks();
     spawnFood();
     updateUI();
+    
     if (gameInterval) clearInterval(gameInterval);
     gameInterval = setInterval(gameLoop, player.speed);
 }
@@ -115,16 +127,14 @@ function spawnGold() {
 
 function gameLoop() { if (!isPaused) { update(); draw(); } }
 
-// --- ÉTAPE 3 : LOGIQUE DE LA CHARGE (MODIFIÉE) ---
 function performDash() {
     if (!player.hasDash || dashCooldown > 0) return;
     
     isDashing = true;
-    dashCooldown = 20; // Cooldown un peu plus long pour l'équilibre
+    dashCooldown = 20;
     playSoundEffect('dash');
     shakeDuration = 5;
 
-    // Le dash propulse le serpent de 3 cases instantanément
     for (let i = 0; i < 3; i++) {
         let headX = snake[0].x;
         let headY = snake[0].y;
@@ -134,17 +144,15 @@ function performDash() {
         if (d === "RIGHT") headX += box;
         if (d === "DOWN") headY += box;
 
-        // Collision Rochers pendant le dash
         for(let j = rocks.length - 1; j >= 0; j--) {
             if(headX === rocks[j].x && headY === rocks[j].y) {
                 rocks.splice(j, 1);
                 player.coins += 3;
                 playSoundEffect('coin');
-                shakeDuration = 8; // Plus de tremblement quand on casse
+                shakeDuration = 8;
             }
         }
 
-        // Collision murs pendant le dash
         if (headX < 0 || headX >= 400 || headY < 0 || headY >= 400) {
             triggerDamage();
             break; 
@@ -154,13 +162,12 @@ function performDash() {
         snake.pop();
     }
     
-    // On laisse isDashing à true pour une frame de plus pour l'effet visuel dans draw()
     setTimeout(() => { isDashing = false; }, 100);
 }
 
 function update() {
     if (dashCooldown > 0) dashCooldown--;
-    if (isDashing) return; // On ne fait pas l'update normal si on dash déjà
+    if (isDashing) return;
 
     d = nextD;
     let headX = snake[0].x;
@@ -171,7 +178,6 @@ function update() {
     if (d === "RIGHT") headX += box;
     if (d === "DOWN") headY += box;
 
-    // Collision Rochers (Normal)
     for(let i = rocks.length - 1; i >= 0; i--) {
         if(headX === rocks[i].x && headY === rocks[i].y) {
             triggerDamage();
@@ -179,7 +185,6 @@ function update() {
         }
     }
 
-    // Collision murs/corps
     if (headX < 0 || headX >= 400 || headY < 0 || headY >= 400 || checkCollision({x:headX, y:headY}, snake)) {
         triggerDamage();
         headX = 10 * box; headY = 10 * box; d = "RIGHT"; nextD = "RIGHT";
@@ -289,13 +294,47 @@ function buyUpgrade(stat) {
 }
 
 function nextLevel() { document.getElementById("shop-menu").classList.add("hidden"); targetScore += 5; boss.maxHp += 50; numEnemies++; startRound(); }
-function levelUp() { player.lvl++; player.xp = 0; const notif = document.getElementById("notif-lvl"); notif.classList.remove("hidden"); setTimeout(() => notif.classList.add("hidden"), 2000); updateUI(); }
-function updateUI() { document.getElementById("hp-val").innerText = player.hp; document.getElementById("coins-val").innerText = player.coins; document.getElementById("lvl-val").innerText = player.lvl; }
-function triggerDamage() { player.hp--; playSoundEffect('hit'); updateUI(); if(player.hp <= 0) gameOver(); }
-function gameOver() { isPaused = true; clearInterval(gameInterval); gameMusic.pause(); document.getElementById("game-over").classList.remove("hidden"); }
-function checkCollision(head, array) { for(let i=0; i<array.length; i++) if(head.x === array[i].x && head.y === array[i].y) return true; return false; }
 
-// --- ÉTAPE 4 : DESSIN ET EFFET DE TRAÎNÉE ---
+function levelUp() {
+    player.lvl++;
+    player.xp = 0;
+    if(player.hp < player.maxHp) player.hp++; // Soin au Level Up
+    snake.push({ ...snake[snake.length-1] }); // Grandir au Level Up
+    
+    playSoundEffect('lvlup');
+    const notif = document.getElementById("notif-lvl");
+    notif.classList.remove("hidden");
+    setTimeout(() => notif.classList.add("hidden"), 2000);
+    updateUI();
+}
+
+function updateUI() {
+    document.getElementById("hp-val").innerText = player.hp;
+    document.getElementById("coins-val").innerText = player.coins;
+    document.getElementById("lvl-val").innerText = player.lvl;
+}
+
+function triggerDamage() { 
+    player.hp--; 
+    playSoundEffect('hit'); 
+    updateUI(); 
+    if(player.hp <= 0) gameOver(); 
+}
+
+function gameOver() { 
+    isPaused = true; 
+    clearInterval(gameInterval); 
+    gameMusic.pause(); 
+    document.getElementById("game-over").classList.remove("hidden"); 
+}
+
+function checkCollision(head, array) { 
+    for(let i=1; i<array.length; i++) {
+        if(head.x === array[i].x && head.y === array[i].y) return true;
+    }
+    return false; 
+}
+
 function draw() {
     ctx.save();
     if (shakeDuration > 0) { ctx.translate(Math.random()*10-5, Math.random()*10-5); shakeDuration--; }
@@ -323,10 +362,9 @@ function draw() {
     if (goldCoin) { ctx.fillStyle = "#FFD700"; ctx.beginPath(); ctx.arc(goldCoin.x+10, goldCoin.y+10, 7, 0, Math.PI*2); ctx.fill(); }
     ctx.fillStyle = "yellow"; bullets.forEach(b => { ctx.beginPath(); ctx.arc(b.x, b.y, 5, 0, Math.PI*2); ctx.fill(); });
 
-    // SERPENT AVEC EFFET DE CHARGE
     snake.forEach((s, i) => {
         if (isDashing) {
-            ctx.fillStyle = "rgba(255, 255, 255, " + (1 - i/snake.length) + ")"; // Dégradé blanc
+            ctx.fillStyle = "rgba(255, 255, 255, " + (1 - i/snake.length) + ")";
             ctx.shadowBlur = 15; ctx.shadowColor = "white";
         } else {
             ctx.fillStyle = i === 0 ? "#333" : characters[player.type].color;
@@ -334,7 +372,6 @@ function draw() {
         }
         ctx.fillRect(s.x, s.y, box-1, box-1);
     });
-
     ctx.restore();
 }
 
@@ -343,7 +380,7 @@ document.addEventListener("keydown", e => {
     if(e.keyCode == 38 && d != "DOWN") nextD = "UP";
     if(e.keyCode == 39 && d != "LEFT") nextD = "RIGHT";
     if(e.keyCode == 40 && d != "UP") nextD = "DOWN";
-    if(e.keyCode == 32) performDash(); // On appelle la nouvelle fonction de dash
+    if(e.keyCode == 32) performDash();
 });
 
 function toggleOptions() {
