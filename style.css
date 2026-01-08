@@ -1,0 +1,63 @@
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    background-color: #264653; 
+    color: white;
+    font-family: 'Courier New', Courier, monospace;
+    overflow: hidden;
+    /* Empêche le rebond du scroll sur iPhone */
+    position: fixed;
+    width: 100%;
+}
+
+.game-container {
+    position: relative;
+    border: 8px solid #a68a64;
+    border-radius: 8px;
+    background-color: #f4a261;
+    /* Désactive les gestes par défaut du navigateur sur le jeu */
+    touch-action: none; 
+}
+
+.top-bar {
+    height: 40px;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0.3);
+}
+
+.score-box { font-size: 16px; font-weight: bold; color: #e9c46a; }
+
+canvas { display: block; background-color: #f4a261; width: 100%; max-width: 400px; height: auto; }
+
+.overlay {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(38, 70, 83, 0.95);
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    z-index: 10;
+}
+
+.hidden { display: none !important; }
+
+h1 { color: #e9c46a; text-shadow: 2px 2px #2a9d8f; margin: 10px; }
+
+button {
+    padding: 12px 25px; font-size: 18px;
+    background-color: #e76f51; border: none; color: white;
+    cursor: pointer; border-radius: 5px; font-weight: bold;
+    margin: 5px; width: 200px;
+}
+
+button.secondary { background-color: #2a9d8f; }
+button.quit-btn { background-color: #444; margin-top: 15px; }
+
+input[type="range"] { accent-color: #e9c46a; width: 80%; }
+
+#new-record { color: #e76f51; font-weight: bold; animation: blink 0.5s infinite alternate; }
+@keyframes blink { from { opacity: 1; } to { opacity: 0.3; } }

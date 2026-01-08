@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Snake Oasis - Version Tactile</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="game-container">
+        <div class="top-bar">
+            <div class="score-box">SCORE: <span id="score">0</span></div>
+            <div class="score-box">BEST: <span id="highScoreHUD">0</span></div>
+        </div>
+
+        <canvas id="snakeGame" width="400" height="400"></canvas>
+
+        <div id="start-menu" class="overlay">
+            <h1>SNAKE OASIS</h1>
+            <p style="color: #e9c46a; margin-bottom: 5px;">MEILLEUR SCORE : <span id="menuHighScore">0</span></p>
+            <p style="color: #a68a64; font-size: 12px; margin-bottom: 20px;">(Glissez le doigt pour diriger)</p>
+            <button onclick="startGame()">Commencer</button>
+            <button class="secondary" onclick="toggleOptions()">Options</button>
+        </div>
+
+        <div id="options-menu" class="overlay hidden">
+            <h1>OPTIONS</h1>
+            <div class="option-group">
+                <label>Musique</label>
+                <input type="range" id="musicRange" min="0" max="1" step="0.1">
+            </div>
+            <div class="option-group">
+                <label>Bruitages</label>
+                <input type="range" id="sfxRange" min="0" max="1" step="0.1">
+            </div>
+            <button onclick="toggleOptions()">Retour</button>
+        </div>
+
+        <div id="game-over" class="overlay hidden">
+            <h1>GAME OVER</h1>
+            <p id="final-score">Score : 0</p>
+            <p id="new-record" class="hidden">NOUVEAU RECORD !</p>
+            <button onclick="startGame()">Réessayer</button>
+            <button class="quit-btn" onclick="exitGame()">Quitter</button>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
