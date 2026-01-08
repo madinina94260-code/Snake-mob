@@ -61,6 +61,11 @@ let numEnemies = 2;
 let boss = { hp: 100, maxHp: 100, x:170, y:50, size: 60, dirX: 6, dirY: 3, state: 'normal', timer: 0 };
 let bullets = [];
 
+// --- VARIABLES TACTILES ---
+let touchStartX = 0;
+let touchStartY = 0;
+let lastTap = 0;
+
 // --- FONCTIONS DE MENU ---
 function showCharMenu() {
     resumeAudioContext();
@@ -69,7 +74,6 @@ function showCharMenu() {
 }
 
 function selectChar(type) {
-    // Réinitialisation complète propre
     player = { ...player, ...characters[type], type: type, coins: 0, lvl: 1, xp: 0, hasDash: false };
     document.getElementById("char-menu").classList.add("hidden");
     document.getElementById("rpg-bar").classList.remove("hidden");
@@ -81,19 +85,15 @@ function selectChar(type) {
 // --- LOGIQUE DE ROUND ---
 function startRound() {
     isPaused = false; score = 0; bossActive = false; bullets = []; goldCoin = null;
-    
-    // Le serpent commence avec une taille proportionnelle au niveau
     snake = [];
     for(let i = 0; i < player.lvl; i++) {
         snake.push({ x: (10 - i) * box, y: 10 * box });
     }
-    
     d = "RIGHT"; nextD = "RIGHT";
     initEnemies();
     spawnRocks();
     spawnFood();
     updateUI();
-    
     if (gameInterval) clearInterval(gameInterval);
     gameInterval = setInterval(gameLoop, player.speed);
 }
@@ -129,21 +129,17 @@ function gameLoop() { if (!isPaused) { update(); draw(); } }
 
 function performDash() {
     if (!player.hasDash || dashCooldown > 0) return;
-    
     isDashing = true;
     dashCooldown = 20;
     playSoundEffect('dash');
     shakeDuration = 5;
-
     for (let i = 0; i < 3; i++) {
         let headX = snake[0].x;
         let headY = snake[0].y;
-
         if (d === "LEFT") headX -= box;
         if (d === "UP") headY -= box;
         if (d === "RIGHT") headX += box;
         if (d === "DOWN") headY += box;
-
         for(let j = rocks.length - 1; j >= 0; j--) {
             if(headX === rocks[j].x && headY === rocks[j].y) {
                 rocks.splice(j, 1);
@@ -152,50 +148,37 @@ function performDash() {
                 shakeDuration = 8;
             }
         }
-
-        if (headX < 0 || headX >= 400 || headY < 0 || headY >= 400) {
-            triggerDamage();
-            break; 
-        }
-
+        if (headX < 0 || headX >= 400 || headY < 0 || headY >= 400) { triggerDamage(); break; }
         snake.unshift({x: headX, y: headY});
         snake.pop();
     }
-    
     setTimeout(() => { isDashing = false; }, 100);
 }
 
 function update() {
     if (dashCooldown > 0) dashCooldown--;
     if (isDashing) return;
-
     d = nextD;
     let headX = snake[0].x;
     let headY = snake[0].y;
-
     if (d === "LEFT") headX -= box;
     if (d === "UP") headY -= box;
     if (d === "RIGHT") headX += box;
     if (d === "DOWN") headY += box;
-
     for(let i = rocks.length - 1; i >= 0; i--) {
         if(headX === rocks[i].x && headY === rocks[i].y) {
             triggerDamage();
             headX = 10 * box; headY = 10 * box;
         }
     }
-
     if (headX < 0 || headX >= 400 || headY < 0 || headY >= 400 || checkCollision({x:headX, y:headY}, snake)) {
         triggerDamage();
         headX = 10 * box; headY = 10 * box; d = "RIGHT"; nextD = "RIGHT";
     }
-
     updateEnemies(headX, headY);
-
     if (goldCoin && headX === goldCoin.x && headY === goldCoin.y) {
         player.coins += 5; goldCoin = null; playSoundEffect('coin'); updateUI();
     }
-
     if (headX === food.x && headY === food.y) {
         if (food.type === 'ammo') {
             bullets.push({ x: headX + 10, y: headY + 10 });
@@ -209,7 +192,6 @@ function update() {
     } else {
         snake.pop();
     }
-
     snake.unshift({x: headX, y: headY});
     if (bossActive) updateBossLogic();
 }
@@ -248,12 +230,9 @@ function updateBossLogic() {
         boss.x += boss.dirX; boss.y += boss.dirY;
         if (boss.timer > 20) { boss.state = 'normal'; boss.timer = 0; boss.dirX /= 4; boss.dirY /= 4; }
     }
-
     if (boss.x <= 0 || boss.x >= 340) { boss.dirX *= -1; shakeDuration = 10; }
     if (boss.y <= 0 || boss.y >= 150) { boss.dirY *= -1; shakeDuration = 10; }
-
     if (bossFlash > 0) bossFlash--;
-
     for (let i = bullets.length - 1; i >= 0; i--) {
         let b = bullets[i];
         let targetX = boss.x + 30, targetY = boss.y + 30;
@@ -275,7 +254,7 @@ function winRound() {
     const powerDesc = document.getElementById("power-desc");
     if (!player.hasDash) {
         player.hasDash = true;
-        powerDesc.innerText = "Tu as absorbé l'âme du Boss ! POUVOIR DÉBLOQUÉ : CHARGE. Appuie sur ESPACE pour pulvériser les rochers !";
+        powerDesc.innerText = "Tu as absorbé l'âme du Boss ! POUVOIR DÉBLOQUÉ : CHARGE. Double-tap l'écran pour pulvériser les rochers !";
     } else { powerDesc.innerText = "Boss vaincu ! Tu as récupéré un bonus de 20 pièces."; }
     victoryScreen.classList.remove("hidden");
 }
@@ -298,9 +277,8 @@ function nextLevel() { document.getElementById("shop-menu").classList.add("hidde
 function levelUp() {
     player.lvl++;
     player.xp = 0;
-    if(player.hp < player.maxHp) player.hp++; // Soin au Level Up
-    snake.push({ ...snake[snake.length-1] }); // Grandir au Level Up
-    
+    if(player.hp < player.maxHp) player.hp++;
+    snake.push({ ...snake[snake.length-1] });
     playSoundEffect('lvlup');
     const notif = document.getElementById("notif-lvl");
     notif.classList.remove("hidden");
@@ -339,29 +317,24 @@ function draw() {
     ctx.save();
     if (shakeDuration > 0) { ctx.translate(Math.random()*10-5, Math.random()*10-5); shakeDuration--; }
     ctx.fillStyle = "#f4a261"; ctx.fillRect(0,0,400,400);
-
     rocks.forEach(r => {
         ctx.fillStyle = "#7f8c8d"; ctx.fillRect(r.x+2, r.y+2, box-4, box-4);
         ctx.strokeStyle = "#2c3e50"; ctx.strokeRect(r.x+2, r.y+2, box-4, box-4);
     });
-
     enemies.forEach(en => {
         ctx.fillStyle = "#8338ec"; ctx.beginPath(); ctx.arc(en.x + 10, en.y + 10, 12, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = "white"; ctx.fillRect(en.x + 2, en.y + 6, 4, 4); ctx.fillRect(en.x + 14, en.y + 6, 4, 4);
     });
-
     if(bossActive) {
         ctx.fillStyle = (boss.state === 'preparing') ? "orange" : (bossFlash > 0 ? "white" : "#3d0000");
         ctx.fillRect(boss.x, boss.y, boss.size, boss.size);
         ctx.fillStyle = (bossFlash > 0) ? "black" : "red";
         ctx.fillRect(boss.x+10, boss.y+10, 10, 10); ctx.fillRect(boss.x+40, boss.y+10, 10, 10);
     }
-
     ctx.fillStyle = food.type === 'ammo' ? "white" : "red";
     ctx.beginPath(); ctx.arc(food.x+10, food.y+10, 8, 0, Math.PI*2); ctx.fill();
     if (goldCoin) { ctx.fillStyle = "#FFD700"; ctx.beginPath(); ctx.arc(goldCoin.x+10, goldCoin.y+10, 7, 0, Math.PI*2); ctx.fill(); }
     ctx.fillStyle = "yellow"; bullets.forEach(b => { ctx.beginPath(); ctx.arc(b.x, b.y, 5, 0, Math.PI*2); ctx.fill(); });
-
     snake.forEach((s, i) => {
         if (isDashing) {
             ctx.fillStyle = "rgba(255, 255, 255, " + (1 - i/snake.length) + ")";
@@ -375,6 +348,7 @@ function draw() {
     ctx.restore();
 }
 
+// --- ÉCOUTEURS D'ÉVÉNEMENTS CLAVIER ---
 document.addEventListener("keydown", e => {
     if(e.keyCode == 37 && d != "RIGHT") nextD = "LEFT";
     if(e.keyCode == 38 && d != "DOWN") nextD = "UP";
@@ -382,6 +356,46 @@ document.addEventListener("keydown", e => {
     if(e.keyCode == 40 && d != "UP") nextD = "DOWN";
     if(e.keyCode == 32) performDash();
 });
+
+// --- ÉCOUTEURS D'ÉVÉNEMENTS TACTILES (NOUVEAU) ---
+canvas.addEventListener('touchstart', function(e) {
+    resumeAudioContext();
+    touchStartX = e.changedTouches[0].screenX;
+    touchStartY = e.changedTouches[0].screenY;
+    
+    // Détection Double Tap pour Dash
+    let now = new Date().getTime();
+    let timesince = now - lastTap;
+    if((timesince < 300) && (timesince > 0)){
+        performDash();
+    }
+    lastTap = now;
+    e.preventDefault();
+}, {passive: false});
+
+canvas.addEventListener('touchend', function(e) {
+    let touchEndX = e.changedTouches[0].screenX;
+    let touchEndY = e.changedTouches[0].screenY;
+    handleSwipe(touchEndX, touchEndY);
+    e.preventDefault();
+}, {passive: false});
+
+canvas.addEventListener('touchmove', function(e) {
+    e.preventDefault();
+}, {passive: false});
+
+function handleSwipe(endX, endY) {
+    let dx = endX - touchStartX;
+    let dy = endY - touchStartY;
+    
+    if (Math.abs(dx) > Math.abs(dy)) { // Swipe Horizontal
+        if (dx > 30 && d != "LEFT") nextD = "RIGHT";
+        else if (dx < -30 && d != "RIGHT") nextD = "LEFT";
+    } else { // Swipe Vertical
+        if (dy > 30 && d != "UP") nextD = "DOWN";
+        else if (dy < -30 && d != "DOWN") nextD = "UP";
+    }
+}
 
 function toggleOptions() {
     document.getElementById("start-menu").classList.toggle("hidden");
