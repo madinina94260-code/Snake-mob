@@ -28,11 +28,191 @@ function playSoundEffect(type) {
     } else if (type === 'lvlup') {
         osc.type = 'sine'; osc.frequency.setValueAtTime(400, audioCtx.currentTime);
         osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.2);
+    } else if (type === 'eat') {
+        osc.type = 'sine'; osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.1);
     }
     g.gain.setValueAtTime(sfxVolume * 0.2, audioCtx.currentTime);
     osc.connect(g); g.connect(audioCtx.destination);
     osc.start(); osc.stop(audioCtx.currentTime + 0.2);
 }
+
+// --- SYSTÈME DE SPRITES (106x106 par sprite) ---
+const spriteSheet = new Image();
+spriteSheet.src = 'snakePreview.png';
+
+const SPRITE_SIZE = 106;
+
+// Structure : Chaque serpent = 2 colonnes × 3 lignes
+// Ligne 0 : [col 0] virage, [col 1] tête droite
+// Ligne 1 : [col 0] corps droit, [col 1] tête tournée (virage)
+// Ligne 2 : [col 0] queue, [col 1] langue
+
+const sprites = {
+    green: {
+        colStart: 0,  // Serpent 1 : colonnes 0-1
+        turn: { col: 0, row: 0 },           // Corps en virage
+        head_straight: { col: 1, row: 0 },  // Tête droite
+        body_straight: { col: 0, row: 1 },  // Corps droit
+        head_turn: { col: 1, row: 1 },      // Tête en virage
+        tail: { col: 0, row: 2 },           // Queue
+        tongue: { col: 1, row: 2 }          // Langue
+    },
+    yellow: {
+        colStart: 2,  // Serpent 2 : colonnes 2-3
+        turn: { col: 2, row: 0 },
+        head_straight: { col: 3, row: 0 },
+        body_straight: { col: 2, row: 1 },
+        head_turn: { col: 3, row: 1 },
+        tail: { col: 2, row: 2 },
+        tongue: { col: 3, row: 2 }
+    },
+    red: {
+        colStart: 4,  // Serpent 3 : colonnes 4-5
+        turn: { col: 4, row: 0 },
+        head_straight: { col: 5, row: 0 },
+        body_straight: { col: 4, row: 1 },
+        head_turn: { col: 5, row: 1 },
+        tail: { col: 4, row: 2 },
+        tongue: { col: 5, row: 2 }
+    }
+};
+
+const spriteMap = {
+    classic: 'green',
+    speedy: 'yellow',
+    tank: 'red'
+};
+
+// Fonction pour dessiner un sprite avec rotation, offset et flip optionnels
+function drawRotatedSprite(sprite, x, y, rotation, offsetY = 0, offsetX = 0, flipH = false, crop = null) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.translate(box/2, box/2);
+    ctx.rotate(rotation);
+    
+    // Appliquer le flip horizontal si nécessaire
+    if (flipH) {
+        ctx.scale(-1, 1);
+    }
+    
+    // Si crop est défini, on ne prend qu'une portion du sprite
+    if (crop) {
+        ctx.drawImage(
+            spriteSheet,
+            sprite.col * SPRITE_SIZE + crop.sx,
+            sprite.row * SPRITE_SIZE + crop.sy,
+            crop.sw,
+            crop.sh,
+            -box/2 + offsetX,
+            -box/2 + offsetY,
+            box, box
+        );
+    } else {
+        // Dessin normal
+        ctx.drawImage(
+            spriteSheet,
+            sprite.col * SPRITE_SIZE,
+            sprite.row * SPRITE_SIZE,
+            SPRITE_SIZE,
+            SPRITE_SIZE,
+            -box/2 + offsetX, -box/2 + offsetY,
+            box, box
+        );
+    }
+    ctx.restore();
+}
+
+// Fonction pour obtenir la direction entre deux segments
+function getDirection(from, to) {
+    if (to.x > from.x) return 'right';
+    if (to.x < from.x) return 'left';
+    if (to.y > from.y) return 'down';
+    if (to.y < from.y) return 'up';
+    return 'right';
+}
+
+// Fonction pour obtenir le sprite et la rotation appropriés
+function getSegmentSpriteData(index, snake) {
+    const snakeType = sprites[spriteMap[player.type]];
+    const segment = snake[index];
+    
+    // Tête
+    if (index === 0) {
+        let rotation = 0;
+        
+        if (d === "RIGHT") rotation = 0;
+        else if (d === "LEFT") rotation = Math.PI;
+        else if (d === "DOWN") rotation = Math.PI / 2;
+        else if (d === "UP") rotation = -Math.PI / 2;
+        
+        return { ...snakeType.head_straight, rotation: rotation };
+    }
+    
+    // Queue
+    if (index === snake.length - 1) {
+        const prev = snake[index - 1];
+        let rotation = 0;
+        
+        if (prev.x > segment.x) rotation = 0;           // Queue vers droite
+        else if (prev.x < segment.x) rotation = Math.PI; // Queue vers gauche
+        else if (prev.y > segment.y) rotation = Math.PI / 2;  // Queue vers bas
+        else rotation = -Math.PI / 2;                    // Queue vers haut
+        
+        return { ...snakeType.tail, rotation: rotation };
+    }
+    
+    // Corps
+    const prev = snake[index - 1];
+    const next = snake[index + 1];
+    
+    const dirIn = getDirection(prev, segment);
+    const dirOut = getDirection(segment, next);
+    
+    // Corps droit (pas de virage)
+    if (dirIn === dirOut) {
+        let rotation = 0;
+        if (dirIn === 'right' || dirIn === 'left') rotation = 0; // Horizontal
+        else rotation = Math.PI / 2; // Vertical
+        
+        return { ...snakeType.body_straight, rotation: rotation };
+    }
+    
+    // OPTION 2 : Sprite de virage complet avec offset (meilleur compromis)
+    let rotation = 0;
+    let flipH = false;
+    
+    // Virages SENS HORAIRE
+    if (dirIn === 'right' && dirOut === 'down') {
+        rotation = 0; flipH = false;
+    } else if (dirIn === 'down' && dirOut === 'left') {
+        rotation = Math.PI / 2; flipH = false;
+    } else if (dirIn === 'left' && dirOut === 'up') {
+        rotation = Math.PI; flipH = false;
+    } else if (dirIn === 'up' && dirOut === 'right') {
+        rotation = -Math.PI / 2; flipH = false;
+    }
+    // Virages SENS ANTI-HORAIRE (avec flip)
+    else if (dirIn === 'down' && dirOut === 'right') {
+        rotation = -Math.PI / 2; flipH = true;
+    } else if (dirIn === 'left' && dirOut === 'down') {
+        rotation = 0; flipH = true;
+    } else if (dirIn === 'up' && dirOut === 'left') {
+        rotation = Math.PI / 2; flipH = true;
+    } else if (dirIn === 'right' && dirOut === 'up') {
+        rotation = Math.PI; flipH = true;
+    }
+    
+    return { ...snakeType.turn, rotation: rotation, offsetY: 9.8, offsetX: 0, flipH: flipH };
+}
+
+spriteSheet.onload = function() {
+    console.log("Spritesheet 106x106 chargé avec succès!");
+};
+
+spriteSheet.onerror = function() {
+    console.error("Erreur lors du chargement du spritesheet");
+};
 
 // --- CONFIGURATION RPG ---
 let player = { type: 'classic', hp: 3, maxHp: 3, dmg: 10, speed: 110, xp: 0, lvl: 1, coins: 0, hasDash: false };
@@ -317,34 +497,70 @@ function draw() {
     ctx.save();
     if (shakeDuration > 0) { ctx.translate(Math.random()*10-5, Math.random()*10-5); shakeDuration--; }
     ctx.fillStyle = "#f4a261"; ctx.fillRect(0,0,400,400);
+    
+    // Rochers
     rocks.forEach(r => {
         ctx.fillStyle = "#7f8c8d"; ctx.fillRect(r.x+2, r.y+2, box-4, box-4);
         ctx.strokeStyle = "#2c3e50"; ctx.strokeRect(r.x+2, r.y+2, box-4, box-4);
     });
+    
+    // Ennemis
     enemies.forEach(en => {
         ctx.fillStyle = "#8338ec"; ctx.beginPath(); ctx.arc(en.x + 10, en.y + 10, 12, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = "white"; ctx.fillRect(en.x + 2, en.y + 6, 4, 4); ctx.fillRect(en.x + 14, en.y + 6, 4, 4);
     });
+    
+    // Boss
     if(bossActive) {
         ctx.fillStyle = (boss.state === 'preparing') ? "orange" : (bossFlash > 0 ? "white" : "#3d0000");
         ctx.fillRect(boss.x, boss.y, boss.size, boss.size);
         ctx.fillStyle = (bossFlash > 0) ? "black" : "red";
         ctx.fillRect(boss.x+10, boss.y+10, 10, 10); ctx.fillRect(boss.x+40, boss.y+10, 10, 10);
     }
+    
+    // Nourriture
     ctx.fillStyle = food.type === 'ammo' ? "white" : "red";
     ctx.beginPath(); ctx.arc(food.x+10, food.y+10, 8, 0, Math.PI*2); ctx.fill();
+    
+    // Pièce d'or
     if (goldCoin) { ctx.fillStyle = "#FFD700"; ctx.beginPath(); ctx.arc(goldCoin.x+10, goldCoin.y+10, 7, 0, Math.PI*2); ctx.fill(); }
+    
+    // Balles
     ctx.fillStyle = "yellow"; bullets.forEach(b => { ctx.beginPath(); ctx.arc(b.x, b.y, 5, 0, Math.PI*2); ctx.fill(); });
-    snake.forEach((s, i) => {
-        if (isDashing) {
-            ctx.fillStyle = "rgba(255, 255, 255, " + (1 - i/snake.length) + ")";
-            ctx.shadowBlur = 15; ctx.shadowColor = "white";
-        } else {
-            ctx.fillStyle = i === 0 ? "#333" : characters[player.type].color;
-            ctx.shadowBlur = 0;
-        }
-        ctx.fillRect(s.x, s.y, box-1, box-1);
-    });
+    
+    // SNAKE AVEC SPRITES 106x106
+    if (spriteSheet.complete && spriteSheet.naturalWidth > 0) {
+        snake.forEach((s, i) => {
+            if (isDashing) {
+                ctx.globalAlpha = 1 - (i / snake.length);
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = "white";
+            } else {
+                ctx.globalAlpha = 1;
+                ctx.shadowBlur = 0;
+            }
+            
+            const spriteData = getSegmentSpriteData(i, snake);
+            if (spriteData) {
+                drawRotatedSprite(spriteData, s.x, s.y, spriteData.rotation, spriteData.offsetY || 0, spriteData.offsetX || 0, spriteData.flipH || false, spriteData.crop || null);
+            }
+        });
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+    } else {
+        // Fallback si sprites pas chargés
+        snake.forEach((s, i) => {
+            if (isDashing) {
+                ctx.fillStyle = "rgba(255, 255, 255, " + (1 - i/snake.length) + ")";
+                ctx.shadowBlur = 15; ctx.shadowColor = "white";
+            } else {
+                ctx.fillStyle = i === 0 ? "#333" : characters[player.type].color;
+                ctx.shadowBlur = 0;
+            }
+            ctx.fillRect(s.x, s.y, box-1, box-1);
+        });
+    }
+    
     ctx.restore();
 }
 
@@ -355,15 +571,15 @@ document.addEventListener("keydown", e => {
     if(e.keyCode == 39 && d != "LEFT") nextD = "RIGHT";
     if(e.keyCode == 40 && d != "UP") nextD = "DOWN";
     if(e.keyCode == 32) performDash();
+    if(e.keyCode == 13) togglePause(); // Entrée pour pause
 });
 
-// --- ÉCOUTEURS D'ÉVÉNEMENTS TACTILES (NOUVEAU) ---
+// --- ÉCOUTEURS D'ÉVÉNEMENTS TACTILES ---
 canvas.addEventListener('touchstart', function(e) {
     resumeAudioContext();
     touchStartX = e.changedTouches[0].screenX;
     touchStartY = e.changedTouches[0].screenY;
     
-    // Détection Double Tap pour Dash
     let now = new Date().getTime();
     let timesince = now - lastTap;
     if((timesince < 300) && (timesince > 0)){
@@ -388,10 +604,10 @@ function handleSwipe(endX, endY) {
     let dx = endX - touchStartX;
     let dy = endY - touchStartY;
     
-    if (Math.abs(dx) > Math.abs(dy)) { // Swipe Horizontal
+    if (Math.abs(dx) > Math.abs(dy)) {
         if (dx > 30 && d != "LEFT") nextD = "RIGHT";
         else if (dx < -30 && d != "RIGHT") nextD = "LEFT";
-    } else { // Swipe Vertical
+    } else {
         if (dy > 30 && d != "UP") nextD = "DOWN";
         else if (dy < -30 && d != "DOWN") nextD = "UP";
     }
@@ -406,4 +622,35 @@ function updateVolume() {
     musicVolume = document.getElementById("musicVol").value;
     sfxVolume = document.getElementById("sfxVol").value;
     menuMusic.volume = musicVolume; gameMusic.volume = musicVolume;
+}
+
+function togglePause() {
+    if (bossActive || snake.length === 0) return; // Pas de pause pendant les menus
+    isPaused = !isPaused;
+    
+    // Afficher/masquer un indicateur de pause
+    let pauseIndicator = document.getElementById("pause-indicator");
+    if (!pauseIndicator) {
+        pauseIndicator = document.createElement("div");
+        pauseIndicator.id = "pause-indicator";
+        pauseIndicator.innerHTML = "⏸️ PAUSE<br><small>Appuyez sur Entrée</small>";
+        pauseIndicator.style.cssText = `
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: #e9c46a;
+            padding: 20px 40px;
+            border-radius: 15px;
+            font-size: 24px;
+            font-weight: bold;
+            z-index: 150;
+            text-align: center;
+            border: 3px solid #e9c46a;
+        `;
+        document.querySelector(".game-container").appendChild(pauseIndicator);
+    }
+    
+    pauseIndicator.style.display = isPaused ? "block" : "none";
 }
